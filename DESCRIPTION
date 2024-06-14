@@ -1,0 +1,16 @@
+Package: rcl
+Title: Regression-Calibrated Lasso
+Version: 0.0.0.9000
+Authors@R: 
+    person("Ganesh", "Chandrasekaran", , "gchandra@pennmedicine.upenn.edu", role = c("aut", "cre"),
+           comment = c(ORCID = "YOUR-ORCID-ID"))
+Description: Provides and example of the usage of the Regression-Calibrated (RC) Lasso, which allows the use of Lasso in the presence of measurement error.
+License: GPL (>= 3)
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.1
+Imports:
+    glmnet (>= 4.1.0),
+    MASS (>= 7.3.0),
+    Matrix (>= 1.6.0),
+    glasso (>= 1.11)
