@@ -7,7 +7,7 @@
 cv_rcl(me_list, Lambda, ...)
 }
 \arguments{
-\item{me_list}{List containing, at the very least, the number of replicates, k, the response y, and a list of k matrices of error-prone observations W -- one for each replicate.}
+\item{me_list}{List containing, at the very least, the number of replicates, k, the response y, a list of k matrices of error-prone observations W -- one for each replicate, and a matrix of error-free predictors Z if one desires to include it in the model.}
 
 \item{Lambda}{Reliability matrix (or its estimate, if unknown).}
 
