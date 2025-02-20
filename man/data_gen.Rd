@@ -4,7 +4,18 @@
 \alias{data_gen}
 \title{Generate Error-Prone Data}
 \usage{
-data_gen(n, p, k, beta, Sig_x, Sig_u, sig2e = 0.1, family = "gaussian")
+data_gen(
+  n,
+  p,
+  k,
+  mu = 0,
+  mu_x = NULL,
+  beta,
+  Sig_x,
+  Sig_u,
+  sig2e = 0.1,
+  family = "gaussian"
+)
 }
 \arguments{
 \item{n}{Number of observations.}
@@ -12,6 +23,10 @@ data_gen(n, p, k, beta, Sig_x, Sig_u, sig2e = 0.1, family = "gaussian")
 \item{p}{Number of predictors.}
 
 \item{k}{Number of replicates.}
+
+\item{mu}{Population intercept (scalar).}
+
+\item{mu_x}{p-dimensional mean vector for error-prone predictors.}
 
 \item{beta}{p-dimensional vector of true coefficients (used to generate the response variable).}
 

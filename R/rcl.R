@@ -21,7 +21,6 @@ rcl <- function(me_list, Lambda, ...){
   
   # average of replicates
   W_bar <- Reduce('+', me_list$W) / me_list$k
-  W_bar <- scale(W_bar, center=TRUE, scale=FALSE)
   
   mu_x_hat <- colMeans(W_bar)
   
