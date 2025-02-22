@@ -24,7 +24,7 @@ rcl <- function(me_list, Lambda, ...){
   
   mu_x_hat <- colMeans(W_bar)
   
-  X_hat <- rep(1,n) %*% t(c(mu_x_hat, mu_z_hat)) %*% (diag(p+q) - Lambda) +
+  X_hat <- rep(1,n) %*% ( t(mu_x_hat) - t(c(mu_x_hat, mu_z_hat)) %*% Lambda ) +
     cbind(W_bar, me_list$Z) %*% Lambda
   
   return (

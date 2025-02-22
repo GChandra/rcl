@@ -15,26 +15,36 @@
 #' 
 #' n <- 300
 #' p <- 500
+#' q <- 4
 #' s <- 10 # number of non-zero coefficients
 #' k <- 5
 #' 
 #' sig2x <- 1
+#' sig2z <- 1
 #' sig2u <- 1
 #' Sig_x <- choose_matrix(sig2x, rho=0.7, p=p, blk_sz=20, structure="diag")
-#' Sig_u <- choose_matrix(k*sig2u, rho=0, p=p, structure="diag")
+#' Sig_u <- choose_matrix(k*sig2u, p=p, structure="diag")
+#' Sig_z <- choose_matrix(sig2z, p=q, structure="diag")
+#' Sig_xz <- matrix(0, nrow=p, ncol=q)
 #' 
 #' mu <- 100
 #' mu_x <- rep(5, p)
+#' mu_z <- rep(5, q)
 #' 
 #' # randomly sample sparsity index set.
 #' S <- sample(1:p, s, replace=FALSE)
 #' beta <- rep(0, p); beta[S] <- 2
-#' data <- data_gen(n=n, p=p, k=k, mu=mu, mu_x=mu_x, beta=beta, Sig_x=Sig_x, Sig_u=Sig_u)
+#' gamma <- sample(1:3, size=q, replace=TRUE)
+#' data <- data_gen(n=n, p=p, q=q, k=k,
+#'                  mu=mu, mu_x=mu_x, mu_z=mu_z,
+#'                  beta=beta, gamma=gamma,
+#'                  Sig_x=Sig_x, Sig_u=Sig_u, Sig_z=Sig_z, Sig_xz=Sig_xz)
 #' 
 #' # average of replicates
 #' W_bar <- Reduce('+', data$W) / k
 #' # use Graphical Lasso (Friedman et al., 2008)
-#' gl <- glasso::glasso(cov(W_bar), rho=0.2)
+#' gl <- glasso::glasso(cov(cbind(W_bar, data$Z)),
+#'                      rho=0.2)
 #' 
 #' # estimate Sig_u, a diagonal matrix
 #' svar2u <- rep(0, p)
@@ -47,20 +57,23 @@
 #' SCov_uu <- diag(svar2u)
 #' 
 #' # estimate reliability matrix
-#' Lambda <- gl$wi %*% (gl$w - SCov_uu/k)
+#' Lambda <- gl$wi %*% (gl$w[,1:p] - rbind(SCov_uu/k, matrix(0,nrow=q,ncol=p)))
 #' 
 #' # cross-validated RC Lasso
 #' cv.rcl.fit <- cv_rcl(data, Lambda, family="gaussian", intercept=TRUE,
 #'                      standardize=TRUE, nfolds=10)
 #' # for comparison, cross-validated Naive Lasso (i.e. no measurement error correction)
-#' cv.nl.fit <- glmnet::cv.glmnet(W_bar, data$y, family="gaussian", intercept=TRUE,
-#'                                standardize=TRUE, nfolds=10)
+#' cv.nl.fit <- glmnet::cv.glmnet(cbind(W_bar, data$Z), data$y, family="gaussian",
+#'                                intercept=TRUE, standardize=TRUE, nfolds=10)
 #' # get estimated intercept from cross-validated 1se lambda
 #' muRC_hat <- as.matrix(coef(cv.rcl.fit, s=cv.rcl.fit$lambda.1se))[1]
 #' muNL_hat <- as.matrix(coef(cv.nl.fit, s=cv.nl.fit$lambda.1se))[1]
-#' # get estimated coefficients from cross-validated 1se lambda
+#' # get estimated beta coefficients from cross-validated 1se lambda
 #' betaRC_hat <- as.matrix(coef(cv.rcl.fit, s=cv.rcl.fit$lambda.1se))[2:(p+1)]
 #' betaNL_hat <- as.matrix(coef(cv.nl.fit, s=cv.nl.fit$lambda.1se))[2:(p+1)]
+#' # get estimated gamma coefficients from cross-validated 1se lambda
+#' gammaRC_hat <- as.matrix(coef(cv.rcl.fit, s=cv.rcl.fit$lambda.1se))[(p+2):(p+q+1)]
+#' gammaNL_hat <- as.matrix(coef(cv.nl.fit, s=cv.nl.fit$lambda.1se))[(p+2):(p+q+1)]
 #' @export
 
 cv_rcl <- function(me_list, Lambda, ...){
@@ -79,7 +92,7 @@ cv_rcl <- function(me_list, Lambda, ...){
   
   mu_x_hat <- colMeans(W_bar)
   
-  X_hat <- rep(1,n) %*% t(c(mu_x_hat, mu_z_hat)) %*% (diag(p+q) - Lambda) +
+  X_hat <- rep(1,n) %*% ( t(mu_x_hat) - t(c(mu_x_hat, mu_z_hat)) %*% Lambda ) +
     cbind(W_bar, me_list$Z) %*% Lambda
   
   return (

@@ -7,12 +7,17 @@
 data_gen(
   n,
   p,
+  q = NULL,
   k,
   mu = 0,
   mu_x = NULL,
+  mu_z = NULL,
   beta,
+  gamma = NULL,
   Sig_x,
   Sig_u,
+  Sig_z = NULL,
+  Sig_xz = NULL,
   sig2e = 0.1,
   family = "gaussian"
 )
@@ -20,7 +25,9 @@ data_gen(
 \arguments{
 \item{n}{Number of observations.}
 
-\item{p}{Number of predictors.}
+\item{p}{Number of error-prone predictors.}
+
+\item{q}{Number of error-free predictors (can be omitted if no Z desired).}
 
 \item{k}{Number of replicates.}
 
@@ -28,11 +35,19 @@ data_gen(
 
 \item{mu_x}{p-dimensional mean vector for error-prone predictors.}
 
-\item{beta}{p-dimensional vector of true coefficients (used to generate the response variable).}
+\item{mu_z}{q-dimensional mean vector for error-free predictors.}
 
-\item{Sig_x}{Covariance matrix for true predictors X.}
+\item{beta}{p-dimensional vector of true coefficients for error-prone predictors (used to generate the response variable).}
+
+\item{gamma}{q-dimensional vector of true coefficients for error-free predictors.}
+
+\item{Sig_x}{Covariance matrix for true error-prone predictors X.}
 
 \item{Sig_u}{Covariance matrix for measurement error U.}
+
+\item{Sig_z}{Covariance matrix for error-free predictors Z (can be omitted if no Z desired).}
+
+\item{Sig_xz}{(p x q)-dimensional covariance matrix for the covariance between X and Z (can be omitted if no Z desired).}
 
 \item{sig2e}{Variance of response (or, equivalently, of residual noise) in linear regression (default 0.1).}
 
@@ -42,5 +57,5 @@ data_gen(
 A list with true predictor matrix X, list of k error-prone replicates W, response variable y, and n, p, and k.
 }
 \description{
-Generates a design matrix as well as its error-prone version with the specified number of replicates, along with the response varaible, based on specified parameters.
+Generates a design matrix as well as its error-prone version with the specified number of replicates, along with the response variable, based on specified parameters. If any of the parameters required to generate error-free predictors Z is missing, Z will not be generated.
 }
