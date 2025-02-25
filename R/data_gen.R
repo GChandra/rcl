@@ -5,7 +5,7 @@
 #' @param n Number of observations.
 #' @param p Number of error-prone predictors.
 #' @param q Number of error-free predictors (can be omitted if no Z desired).
-#' @param k Number of replicates.
+#' @param k Scalar or n-dimensional vector indicating the number of replicates for each subject.
 #' @param mu Population intercept (scalar).
 #' @param mu_x p-dimensional mean vector for error-prone predictors.
 #' @param mu_z q-dimensional mean vector for error-free predictors.
@@ -17,7 +17,7 @@
 #' @param Sig_xz (p x q)-dimensional covariance matrix for the covariance between X and Z (can be omitted if no Z desired).
 #' @param sig2e Variance of response (or, equivalently, of residual noise) in linear regression (default 0.1).
 #' @param family Distribution of response conditional on true predictors X ("gaussian" for linear regression, or "binomial" for logistic regression).
-#' @return A list with true predictor matrix X, list of k error-prone replicates W, response variable y, and n, p, and k.
+#' @return A list with true predictor matrix X, list W of size n where each element is a k[i] x p matrix with replicates, response variable y, and n, p, and k.
 #' @export
 
 data_gen <- function(n, p, q=NULL, k,
@@ -27,6 +27,10 @@ data_gen <- function(n, p, q=NULL, k,
                      sig2e=0.1, family="gaussian"){
   if (is.null(mu_x)){
     mu_x <- rep(0, p)
+  }
+  
+  if (length(k) == 1){
+    k <- rep(k, n)
   }
   
   if ( any(sapply(list(q, gamma, Sig_z, Sig_xz), is.null)) ){
@@ -63,12 +67,9 @@ data_gen <- function(n, p, q=NULL, k,
   }
   
   W <- list()
-  if (k == 1){
-    W[[1]] <- X + MASS::mvrnorm(n, mu=rep(0,p), Sigma=Sig_u)
-  } else {
-    for (r in 1:k){
-      W[[r]] <- X + MASS::mvrnorm(n, mu=rep(0,p), Sigma=Sig_u)
-    }
+  for (i in 1:n){
+    W[[i]] <- matrix(rep(1,k[i]), ncol=1) %*% X[i,] +
+      MASS::mvrnorm(k[i], mu=rep(0,p), Sigma=Sig_u)
   }
   
   if (no_Z){

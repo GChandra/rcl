@@ -29,7 +29,7 @@ data_gen(
 
 \item{q}{Number of error-free predictors (can be omitted if no Z desired).}
 
-\item{k}{Number of replicates.}
+\item{k}{Scalar or n-dimensional vector indicating the number of replicates for each subject.}
 
 \item{mu}{Population intercept (scalar).}
 
@@ -54,7 +54,7 @@ data_gen(
 \item{family}{Distribution of response conditional on true predictors X ("gaussian" for linear regression, or "binomial" for logistic regression).}
 }
 \value{
-A list with true predictor matrix X, list of k error-prone replicates W, response variable y, and n, p, and k.
+A list with true predictor matrix X, list W of size n where each element is a k\link{i} x p matrix with replicates, response variable y, and n, p, and k.
 }
 \description{
 Generates a design matrix as well as its error-prone version with the specified number of replicates, along with the response variable, based on specified parameters. If any of the parameters required to generate error-free predictors Z is missing, Z will not be generated.

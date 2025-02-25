@@ -2,9 +2,13 @@
 #' 
 #' @description
 #' Cross-validation for RC Lasso for linear or logistic regression.
-#' @param me_list List containing, at the very least, the number of replicates, k, the response y, a list of k matrices of error-prone observations W -- one for each replicate, and a matrix of error-free predictors Z if one desires to include it in the model.
-#' @param Lambda Reliability matrix (or its estimate, if unknown).
-#' @param ... Inputs to the cv.glmnet function.
+#' @param me_list List containing, at the very least, an n-dimensional vector indicating the number of replicates per subject, k, the response y, a list of n matrices of error-prone observations W -- one for each subject and with dimension k[i] x p, and a matrix of error-free predictors Z if one desires to include it in the model.
+#' @param SCov_x p x p dimensional matrix for the estimated covariance matrix for true predictors X.
+#' @param SCov_u p x p dimensional matrix for the estimated covariance matrix for the measurement errors U.
+#' @param SCov_z q x q dimensional matrix for the estimated covariance matrix for the error-free predictors Z (optional).
+#' @param SCov_xz p x q dimensional matrix for the estimated cross-covariance matrix between X and Z (optional).
+#' @param fun function used to estimate precision matrices. Must take as the first input the matrix to invert, followed by additional arguments.
+#' @param ... Additional inputs to "fun" and to the glmnet function.
 #' @return An object of class "cv.glmnet".
 #' @examples
 #' if(!require("glasso")){
@@ -13,17 +17,21 @@
 #' 
 #' set.seed(1424)
 #' 
+#' inv_fun <- function(M, rho, ...){
+#'   return( glasso::glasso(M, rho=rho)$wi )
+#' }
+#' 
 #' n <- 300
 #' p <- 500
 #' q <- 4
 #' s <- 10 # number of non-zero coefficients
-#' k <- 5
+#' k <- sample(1:3, size=n, replace=TRUE)
 #' 
 #' sig2x <- 1
 #' sig2z <- 1
 #' sig2u <- 1
-#' Sig_x <- choose_matrix(sig2x, rho=0.7, p=p, blk_sz=20, structure="diag")
-#' Sig_u <- choose_matrix(k*sig2u, p=p, structure="diag")
+#' Sig_x <- choose_matrix(sig2x, rho=0.7, p=p, blk_sz=20, structure="block")
+#' Sig_u <- choose_matrix(min(k)*sig2u, p=p, structure="diag")
 #' Sig_z <- choose_matrix(sig2z, p=q, structure="diag")
 #' Sig_xz <- matrix(0, nrow=p, ncol=q)
 #' 
@@ -41,27 +49,12 @@
 #'                  Sig_x=Sig_x, Sig_u=Sig_u, Sig_z=Sig_z, Sig_xz=Sig_xz)
 #' 
 #' # average of replicates
-#' W_bar <- Reduce('+', data$W) / k
-#' # use Graphical Lasso (Friedman et al., 2008)
-#' gl <- glasso::glasso(cov(cbind(W_bar, data$Z)),
-#'                      rho=0.2)
-#' 
-#' # estimate Sig_u, a diagonal matrix
-#' svar2u <- rep(0, p)
-#' for (i in 1:p){
-#'   for (j in 1:k){
-#'     svar2u[i] <- svar2u[i] + sum( (data$W[[j]][,i] - W_bar[,i])^2 )
-#'   }
-#' }
-#' svar2u <- svar2u / (n*(k-1))
-#' SCov_uu <- diag(svar2u)
-#' 
-#' # estimate reliability matrix
-#' Lambda <- gl$wi %*% (gl$w[,1:p] - rbind(SCov_uu/k, matrix(0,nrow=q,ncol=p)))
+#' W_bar <- t(sapply(data$W, colMeans, simplify=TRUE))
 #' 
 #' # cross-validated RC Lasso
-#' cv.rcl.fit <- cv_rcl(data, Lambda, family="gaussian", intercept=TRUE,
-#'                      standardize=TRUE, nfolds=10)
+#' cv.rcl.fit <- cv_rcl(data, Sig_x, Sig_u, Sig_z, Sig_xz,
+#'                      rho=0.2,
+#'                      family="gaussian", intercept=TRUE, standardize=TRUE, nfolds=10)
 #' # for comparison, cross-validated Naive Lasso (i.e. no measurement error correction)
 #' cv.nl.fit <- glmnet::cv.glmnet(cbind(W_bar, data$Z), data$y, family="gaussian",
 #'                                intercept=TRUE, standardize=TRUE, nfolds=10)
@@ -76,7 +69,8 @@
 #' gammaNL_hat <- as.matrix(coef(cv.nl.fit, s=cv.nl.fit$lambda.1se))[(p+2):(p+q+1)]
 #' @export
 
-cv_rcl <- function(me_list, Lambda, ...){
+cv_rcl <- function(me_list, SCov_x, SCov_u, SCov_z=NULL, SCov_xz=NULL,
+                   fun=NULL, ...){
   n <- length(me_list$y)
   p <- ncol(me_list$W[[1]])
   if (!is.null(me_list$Z)){
@@ -87,13 +81,44 @@ cv_rcl <- function(me_list, Lambda, ...){
     mu_z_hat <- NULL
   }
   
+  unique_k <- sort(unique(me_list$k))
+  
   # average of replicates
-  W_bar <- Reduce('+', me_list$W) / me_list$k
+  W_bar <- t(sapply(me_list$W, colMeans, simplify=TRUE))
   
-  mu_x_hat <- colMeans(W_bar)
+  # estimate other quantities
+  mu_w_hat <- colSums( diag(me_list$k) %*% W_bar ) / sum(me_list$k)
+  mu_z_hat <- colMeans(me_list$Z)
   
-  X_hat <- rep(1,n) %*% ( t(mu_x_hat) - t(c(mu_x_hat, mu_z_hat)) %*% Lambda ) +
-    cbind(W_bar, me_list$Z) %*% Lambda
+  if(is.null(fun)) {
+    if (n < p){
+      warning("n < p, subsequent estimate may be nonsingular")
+    }
+    
+    Lambda <- lapply(unique_k,
+                     function(k){
+                       solve(cbind(
+                         rbind(SCov_x + SCov_u/k, t(SCov_xz)),
+                         rbind(SCov_xz, SCov_z)
+                       )) %*% rbind( SCov_x, t(SCov_xz) )
+                     }
+    )
+  } else {
+    Lambda <- lapply(unique_k,
+                     function(k){
+                       fun(cbind(
+                         rbind(SCov_x + SCov_u/k, t(SCov_xz)),
+                         rbind(SCov_xz, SCov_z)
+                       ), ...) %*% rbind( SCov_x, t(SCov_xz) )
+                     }
+    )
+  }
+  
+  X_hat <- matrix(0, nrow=n, ncol=p)
+  for (i in 1:n){
+    X_hat[i,] <- ( t(mu_w_hat) - t(c(mu_w_hat, mu_z_hat)) %*% Lambda[[ which(unique_k==k[i]) ]] ) +
+      c(W_bar[i,], me_list$Z[i,]) %*% Lambda[[ which(unique_k==k[i]) ]]
+  }
   
   return (
     glmnet::cv.glmnet(cbind(X_hat, me_list$Z), me_list$y, ...)
