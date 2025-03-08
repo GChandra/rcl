@@ -27,40 +27,56 @@ rcl <- function(me_list, SCov_x, SCov_u, SCov_z=NULL, SCov_xz=NULL,
   unique_k <- sort(unique(me_list$k))
   
   # average of replicates
-  W_bar <- t(sapply(me_list$W, colMeans, simplify=TRUE))
+  W_bar <- t(sapply(me_list$W, colMeans, na.rm=TRUE, simplify=TRUE))
   
   # estimate other quantities
   mu_w_hat <- colSums( diag(me_list$k) %*% W_bar ) / sum(me_list$k)
-  mu_z_hat <- colMeans(me_list$Z)
   
   if(is.null(fun)) {
     if (n < p){
       warning("n < p, subsequent estimate may be nonsingular")
     }
     
-    Lambda <- lapply(unique_k,
-                     function(k){
-                       solve(cbind(
-                         rbind(SCov_x + SCov_u/k, t(SCov_xz)),
-                         rbind(SCov_xz, SCov_z)
-                       )) %*% rbind( SCov_x, t(SCov_xz) )
-                     }
-    )
+    if (is.null(me_list$Z)){
+      Lambda <- lapply(unique_k,
+                       function(k){
+                         solve(SCov_x + SCov_u/k) %*% SCov_x
+                       }
+      )
+    } else {
+      Lambda <- lapply(unique_k,
+                       function(k){
+                         solve(cbind(
+                           rbind(SCov_x + SCov_u/k, t(SCov_xz)),
+                           rbind(SCov_xz, SCov_z)
+                         )) %*% rbind( SCov_x, t(SCov_xz) )
+                       }
+      )
+    }
   } else {
-    Lambda <- lapply(unique_k,
-                     function(k){
-                       fun(cbind(
-                         rbind(SCov_x + SCov_u/k, t(SCov_xz)),
-                         rbind(SCov_xz, SCov_z)
-                       ), ...) %*% rbind( SCov_x, t(SCov_xz) )
-                     }
-    )
+    if (is.null(me_list$Z)){
+      Lambda <- lapply(unique_k,
+                       function(k){
+                         fun(SCov_x + SCov_u/k, ...) %*% SCov_x
+                       }
+      )
+    } else {
+      Lambda <- lapply(unique_k,
+                       function(k){
+                         fun(cbind(
+                           rbind(SCov_x + SCov_u/k, t(SCov_xz)),
+                           rbind(SCov_xz, SCov_z)
+                         ), ...) %*% rbind( SCov_x, t(SCov_xz) )
+                       }
+      )
+    }
   }
   
   X_hat <- matrix(0, nrow=n, ncol=p)
   for (i in 1:n){
-    X_hat[i,] <- ( t(mu_w_hat) - t(c(mu_w_hat, mu_z_hat)) %*% Lambda[[ which(unique_k==k[i]) ]] ) +
-      c(W_bar[i,], me_list$Z[i,]) %*% Lambda[[ which(unique_k==k[i]) ]]
+    X_hat[i,] <- ( t(mu_w_hat) - t(c(mu_w_hat, mu_z_hat)) %*%
+                     Lambda[[ which(unique_k==me_list$k[i]) ]] ) +
+      c(W_bar[i,], me_list$Z[i,]) %*% Lambda[[ which(unique_k==me_list$k[i]) ]]
   }
   
   return (
