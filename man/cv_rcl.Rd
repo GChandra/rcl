@@ -4,7 +4,16 @@
 \alias{cv_rcl}
 \title{Cross-Validated Regression-Calibrated Lasso}
 \usage{
-cv_rcl(me_list, SCov_x, SCov_u, SCov_z = NULL, SCov_xz = NULL, fun = NULL, ...)
+cv_rcl(
+  me_list,
+  SCov_x,
+  SCov_u,
+  SPrec_w = NULL,
+  SCov_z = NULL,
+  SCov_xz = NULL,
+  fun = NULL,
+  ...
+)
 }
 \arguments{
 \item{me_list}{List containing, at the very least, an n-dimensional vector indicating the number of replicates per subject, k, the response y, a list of n matrices of error-prone observations W -- one for each subject and with dimension k\link{i} x p, and a matrix of error-free predictors Z if one desires to include it in the model.}
@@ -12,6 +21,8 @@ cv_rcl(me_list, SCov_x, SCov_u, SCov_z = NULL, SCov_xz = NULL, fun = NULL, ...)
 \item{SCov_x}{p x p dimensional matrix for the estimated covariance matrix for true predictors X.}
 
 \item{SCov_u}{p x p dimensional matrix for the estimated covariance matrix for the measurement errors U.}
+
+\item{SPrec_w}{p x p dimensional matrix for estimated precision matrix for the observed (noisy) data. If NULL (default), it will be estimated with the function provided in the 'fun' argument.}
 
 \item{SCov_z}{q x q dimensional matrix for the estimated covariance matrix for the error-free predictors Z (optional).}
 
@@ -47,7 +58,7 @@ k <- sample(1:3, size=n, replace=TRUE)
 sig2x <- 1
 sig2z <- 1
 sig2u <- 1
-Sig_x <- choose_matrix(sig2x, rho=0.7, p=p, blk_sz=20, structure="block")
+Sig_x <- choose_matrix(sig2x, rho=0.7, p=p, blk_sz=20, structure="diag")
 Sig_u <- choose_matrix(min(k)*sig2u, p=p, structure="diag")
 Sig_z <- choose_matrix(sig2z, p=q, structure="diag")
 Sig_xz <- matrix(0, nrow=p, ncol=q)
@@ -65,11 +76,32 @@ data <- data_gen(n=n, p=p, q=q, k=k,
                  beta=beta, gamma=gamma,
                  Sig_x=Sig_x, Sig_u=Sig_u, Sig_z=Sig_z, Sig_xz=Sig_xz)
 
+# estimate Sig_u, a diagonal matrix
+SCov_u <- lapply(1:n,
+                 function(i) t(scale(data$W[[i]], scale=FALSE)) \%*\% scale(data$W[[i]], scale=FALSE) )
+SCov_u <- diag(diag( Reduce('+', SCov_u) / (sum(k) - n) ))
+
 # average of replicates
 W_bar <- t(sapply(data$W, colMeans, simplify=TRUE))
 
+# estimate other quantities
+mu_w_hat <- colSums( diag(k) \%*\% W_bar ) / sum(k)
+mu_z_hat <- colMeans(data$Z)
+nu <- sum(k) - sum(k^2)/sum(k)
+
+# estimate Sig_z
+SCov_z <- cov(data$Z)
+
+# estimate Sig_xz
+SCov_xz <- t(diag(k) \%*\% (W_bar - matrix(rep(1,n), ncol=1)\%*\%mu_w_hat)) \%*\%
+  (data$Z - matrix(rep(1,n), ncol=1)\%*\%mu_z_hat) / nu
+
+#estimate Sig_x
+SCov_x <- (cov(diag(sqrt(k)) \%*\% W_bar) - SCov_u) * (n-1) / nu
+
 # cross-validated RC Lasso
-cv.rcl.fit <- cv_rcl(data, Sig_x, Sig_u, Sig_z, Sig_xz,
+cv.rcl.fit <- cv_rcl(data, SCov_x, SCov_u, SCov_z, SCov_xz,
+                     fun=inv_fun,
                      rho=0.2,
                      family="gaussian", intercept=TRUE, standardize=TRUE, nfolds=10)
 # for comparison, cross-validated Naive Lasso (i.e. no measurement error correction)

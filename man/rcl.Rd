@@ -4,7 +4,16 @@
 \alias{rcl}
 \title{Regression-Calibrated Lasso}
 \usage{
-rcl(me_list, SCov_x, SCov_u, SCov_z = NULL, SCov_xz = NULL, fun = NULL, ...)
+rcl(
+  me_list,
+  SCov_x,
+  SCov_u,
+  SPrec_w = NULL,
+  SCov_z = NULL,
+  SCov_xz = NULL,
+  fun = NULL,
+  ...
+)
 }
 \arguments{
 \item{me_list}{List containing, at the very least, an n-dimensional vector indicating the number of replicates per subject, k, the response y, a list of n matrices of error-prone observations W -- one for each subject and with dimension k\link{i} x p, and a matrix of error-free predictors Z if one desires to include it in the model.}
@@ -12,6 +21,8 @@ rcl(me_list, SCov_x, SCov_u, SCov_z = NULL, SCov_xz = NULL, fun = NULL, ...)
 \item{SCov_x}{p x p dimensional matrix for the estimated covariance matrix for true predictors X.}
 
 \item{SCov_u}{p x p dimensional matrix for the estimated covariance matrix for the measurement errors U.}
+
+\item{SPrec_w}{p x p dimensional matrix for estimated precision matrix for the observed (noisy) data. If NULL (default), it will be estimated with the function provided in the 'fun' argument.}
 
 \item{SCov_z}{q x q dimensional matrix for the estimated covariance matrix for the error-free predictors Z (optional).}
 

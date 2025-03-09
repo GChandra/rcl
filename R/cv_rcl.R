@@ -5,6 +5,7 @@
 #' @param me_list List containing, at the very least, an n-dimensional vector indicating the number of replicates per subject, k, the response y, a list of n matrices of error-prone observations W -- one for each subject and with dimension k[i] x p, and a matrix of error-free predictors Z if one desires to include it in the model.
 #' @param SCov_x p x p dimensional matrix for the estimated covariance matrix for true predictors X.
 #' @param SCov_u p x p dimensional matrix for the estimated covariance matrix for the measurement errors U.
+#' @param SPrec_w p x p dimensional matrix for estimated precision matrix for the observed (noisy) data. If NULL (default), it will be estimated with the function provided in the 'fun' argument.
 #' @param SCov_z q x q dimensional matrix for the estimated covariance matrix for the error-free predictors Z (optional).
 #' @param SCov_xz p x q dimensional matrix for the estimated cross-covariance matrix between X and Z (optional).
 #' @param fun function used to estimate precision matrices. Must take as the first input the matrix to invert, followed by additional arguments.
@@ -30,7 +31,7 @@
 #' sig2x <- 1
 #' sig2z <- 1
 #' sig2u <- 1
-#' Sig_x <- choose_matrix(sig2x, rho=0.7, p=p, blk_sz=20, structure="block")
+#' Sig_x <- choose_matrix(sig2x, rho=0.7, p=p, blk_sz=20, structure="diag")
 #' Sig_u <- choose_matrix(min(k)*sig2u, p=p, structure="diag")
 #' Sig_z <- choose_matrix(sig2z, p=q, structure="diag")
 #' Sig_xz <- matrix(0, nrow=p, ncol=q)
@@ -38,7 +39,7 @@
 #' mu <- 100
 #' mu_x <- rep(5, p)
 #' mu_z <- rep(5, q)
-#' 
+#'
 #' # randomly sample sparsity index set.
 #' S <- sample(1:p, s, replace=FALSE)
 #' beta <- rep(0, p); beta[S] <- 2
@@ -48,11 +49,32 @@
 #'                  beta=beta, gamma=gamma,
 #'                  Sig_x=Sig_x, Sig_u=Sig_u, Sig_z=Sig_z, Sig_xz=Sig_xz)
 #' 
+#' # estimate Sig_u, a diagonal matrix
+#' SCov_u <- lapply(1:n,
+#'                  function(i) t(scale(data$W[[i]], scale=FALSE)) %*% scale(data$W[[i]], scale=FALSE) )
+#' SCov_u <- diag(diag( Reduce('+', SCov_u) / (sum(k) - n) ))
+#' 
 #' # average of replicates
 #' W_bar <- t(sapply(data$W, colMeans, simplify=TRUE))
 #' 
+#' # estimate other quantities
+#' mu_w_hat <- colSums( diag(k) %*% W_bar ) / sum(k)
+#' mu_z_hat <- colMeans(data$Z)
+#' nu <- sum(k) - sum(k^2)/sum(k)
+#' 
+#' # estimate Sig_z
+#' SCov_z <- cov(data$Z)
+#' 
+#' # estimate Sig_xz
+#' SCov_xz <- t(diag(k) %*% (W_bar - matrix(rep(1,n), ncol=1)%*%mu_w_hat)) %*%
+#'   (data$Z - matrix(rep(1,n), ncol=1)%*%mu_z_hat) / nu
+#' 
+#' #estimate Sig_x
+#' SCov_x <- (cov(diag(sqrt(k)) %*% W_bar) - SCov_u) * (n-1) / nu
+#' 
 #' # cross-validated RC Lasso
-#' cv.rcl.fit <- cv_rcl(data, Sig_x, Sig_u, Sig_z, Sig_xz,
+#' cv.rcl.fit <- cv_rcl(data, SCov_x, SCov_u, SCov_z, SCov_xz,
+#'                      fun=inv_fun,
 #'                      rho=0.2,
 #'                      family="gaussian", intercept=TRUE, standardize=TRUE, nfolds=10)
 #' # for comparison, cross-validated Naive Lasso (i.e. no measurement error correction)
@@ -69,7 +91,7 @@
 #' gammaNL_hat <- as.matrix(coef(cv.nl.fit, s=cv.nl.fit$lambda.1se))[(p+2):(p+q+1)]
 #' @export
 
-cv_rcl <- function(me_list, SCov_x, SCov_u, SCov_z=NULL, SCov_xz=NULL,
+cv_rcl <- function(me_list, SCov_x, SCov_u, SPrec_w=NULL, SCov_z=NULL, SCov_xz=NULL,
                    fun=NULL, ...){
   n <- length(me_list$y)
   p <- ncol(me_list$W[[1]])
@@ -89,51 +111,57 @@ cv_rcl <- function(me_list, SCov_x, SCov_u, SCov_z=NULL, SCov_xz=NULL,
   # estimate other quantities
   mu_w_hat <- colSums( diag(me_list$k) %*% W_bar ) / sum(me_list$k)
   
-  if(is.null(fun)) {
-    if (n < p){
-      warning("n < p, subsequent estimate may be nonsingular")
+  if (!is.null(SPrec_w)){
+    Lambda <- SPrec_w %*% SCov_x
+    X_hat <- matrix(rep(1,n), ncol=1) %*% (t(mu_w_hat) - t(mu_w_hat)%*%Lambda) +
+      W_bar %*% Lambda
+  } else {
+    if(is.null(fun)) {
+      if (n < p){
+        warning("n < p, subsequent estimate may be nonsingular")
+      }
+      
+      if (is.null(me_list$Z)){
+        Lambda <- lapply(unique_k,
+                         function(k){
+                           solve(SCov_x + SCov_u/k) %*% SCov_x
+                         }
+        )
+      } else {
+        Lambda <- lapply(unique_k,
+                         function(k){
+                           solve(cbind(
+                             rbind(SCov_x + SCov_u/k, t(SCov_xz)),
+                             rbind(SCov_xz, SCov_z)
+                           )) %*% rbind( SCov_x, t(SCov_xz) )
+                         }
+        )
+      }
+    } else {
+      if (is.null(me_list$Z)){
+        Lambda <- lapply(unique_k,
+                         function(k){
+                           fun(SCov_x + SCov_u/k, ...) %*% SCov_x
+                         }
+        )
+      } else {
+        Lambda <- lapply(unique_k,
+                         function(k){
+                           fun(cbind(
+                             rbind(SCov_x + SCov_u/k, t(SCov_xz)),
+                             rbind(SCov_xz, SCov_z)
+                           ), ...) %*% rbind( SCov_x, t(SCov_xz) )
+                         }
+        )
+      }
     }
     
-    if (is.null(me_list$Z)){
-      Lambda <- lapply(unique_k,
-                       function(k){
-                         solve(SCov_x + SCov_u/k) %*% SCov_x
-                       }
-      )
-    } else {
-      Lambda <- lapply(unique_k,
-                       function(k){
-                         solve(cbind(
-                           rbind(SCov_x + SCov_u/k, t(SCov_xz)),
-                           rbind(SCov_xz, SCov_z)
-                         )) %*% rbind( SCov_x, t(SCov_xz) )
-                       }
-      )
+    X_hat <- matrix(0, nrow=n, ncol=p)
+    for (i in 1:n){
+      X_hat[i,] <- ( t(mu_w_hat) - t(c(mu_w_hat, mu_z_hat)) %*%
+                       Lambda[[ which(unique_k==me_list$k[i]) ]] ) +
+        c(W_bar[i,], me_list$Z[i,]) %*% Lambda[[ which(unique_k==me_list$k[i]) ]]
     }
-  } else {
-    if (is.null(me_list$Z)){
-      Lambda <- lapply(unique_k,
-                       function(k){
-                         fun(SCov_x + SCov_u/k, ...) %*% SCov_x
-                       }
-      )
-    } else {
-      Lambda <- lapply(unique_k,
-                       function(k){
-                         fun(cbind(
-                           rbind(SCov_x + SCov_u/k, t(SCov_xz)),
-                           rbind(SCov_xz, SCov_z)
-                         ), ...) %*% rbind( SCov_x, t(SCov_xz) )
-                       }
-      )
-    }
-  }
-  
-  X_hat <- matrix(0, nrow=n, ncol=p)
-  for (i in 1:n){
-    X_hat[i,] <- ( t(mu_w_hat) - t(c(mu_w_hat, mu_z_hat)) %*%
-                     Lambda[[ which(unique_k==me_list$k[i]) ]] ) +
-      c(W_bar[i,], me_list$Z[i,]) %*% Lambda[[ which(unique_k==me_list$k[i]) ]]
   }
   
   return (
