@@ -8,9 +8,9 @@ rcl(
   me_list,
   SCov_x,
   SCov_u,
-  SPrec_w = NULL,
   SCov_z = NULL,
   SCov_xz = NULL,
+  Lambda = NULL,
   fun = NULL,
   ...
 )
@@ -22,11 +22,11 @@ rcl(
 
 \item{SCov_u}{p x p dimensional matrix for the estimated covariance matrix for the measurement errors U.}
 
-\item{SPrec_w}{p x p dimensional matrix for estimated precision matrix for the observed (noisy) data. If NULL (default), it will be estimated with the function provided in the 'fun' argument.}
-
 \item{SCov_z}{q x q dimensional matrix for the estimated covariance matrix for the error-free predictors Z (optional).}
 
 \item{SCov_xz}{p x q dimensional matrix for the estimated cross-covariance matrix between X and Z (optional).}
+
+\item{Lambda}{(p + q) x p dimensional matrix for the attenuation matrix. If provided, it is used instead of any of the other provided covariance matrix estimates. Only implemented for equal number of replicates per subject. Default NULL.}
 
 \item{fun}{function used to estimate precision matrices. Must take as the first input the matrix to invert, followed by additional arguments.}
 

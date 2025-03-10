@@ -5,15 +5,15 @@
 #' @param me_list List containing, at the very least, an n-dimensional vector indicating the number of replicates per subject, k, the response y, a list of n matrices of error-prone observations W -- one for each subject and with dimension k[i] x p, and a matrix of error-free predictors Z if one desires to include it in the model.
 #' @param SCov_x p x p dimensional matrix for the estimated covariance matrix for true predictors X.
 #' @param SCov_u p x p dimensional matrix for the estimated covariance matrix for the measurement errors U.
-#' @param SPrec_w p x p dimensional matrix for estimated precision matrix for the observed (noisy) data. If NULL (default), it will be estimated with the function provided in the 'fun' argument.
 #' @param SCov_z q x q dimensional matrix for the estimated covariance matrix for the error-free predictors Z (optional).
 #' @param SCov_xz p x q dimensional matrix for the estimated cross-covariance matrix between X and Z (optional).
+#' @param Lambda (p + q) x p dimensional matrix for the attenuation matrix. If provided, it is used instead of any of the other provided covariance matrix estimates. Only implemented for equal number of replicates per subject. Default NULL.
 #' @param fun function used to estimate precision matrices. Must take as the first input the matrix to invert, followed by additional arguments.
 #' @param ... Additional inputs to "fun" and to the glmnet function.
 #' @return An object of class "glmnet".
 #' @export
 
-rcl <- function(me_list, SCov_x, SCov_u, SPrec_w=NULL, SCov_z=NULL, SCov_xz=NULL,
+rcl <- function(me_list, SCov_x, SCov_u, SCov_z=NULL, SCov_xz=NULL, Lambda=NULL,
                 fun=NULL, ...){
   n <- length(me_list$y)
   p <- ncol(me_list$W[[1]])
@@ -33,10 +33,9 @@ rcl <- function(me_list, SCov_x, SCov_u, SPrec_w=NULL, SCov_z=NULL, SCov_xz=NULL
   # estimate other quantities
   mu_w_hat <- colSums( diag(me_list$k) %*% W_bar ) / sum(me_list$k)
   
-  if (!is.null(SPrec_w)){
-    Lambda <- SPrec_w %*% SCov_x
-    X_hat <- matrix(rep(1,n), ncol=1) %*% (t(mu_w_hat) - t(mu_w_hat)%*%Lambda) +
-      W_bar %*% Lambda
+  if (!is.null(Lambda)){
+    X_hat <- matrix(rep(1,n), ncol=1) %*% (t(mu_w_hat) - t(c(mu_w_hat, mu_z_hat))%*%Lambda) +
+      cbind(W_bar, me_list$Z) %*% Lambda
   } else {
     if(is.null(fun)) {
       if (n < p){
